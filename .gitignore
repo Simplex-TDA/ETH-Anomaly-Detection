@@ -1,0 +1,60 @@
+# Credentials (never commit)
+credentials.py
+config.py
+
+# Process documentation (not for publication)
+process_docs/
+
+# Claude Code settings
+.claude/
+
+# Data files
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# Large data / output files
+*.parquet
+*.csv
+*.tsv
+run_results*.json
+analysis*.json
+anomaly_reports/
+
+# Temporary files
+*.tmp
+*.log
+_progress.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+venv/
+env/
+ENV/
+
+# Figures/visualizations (optional - uncomment if you want to track them)
+# *.png
+# *.pdf
