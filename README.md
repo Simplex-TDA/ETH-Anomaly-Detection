@@ -4,6 +4,8 @@ Topological Data Analysis (TDA) pipeline for detecting anomalies in Ethereum tra
 
 **Re-implementation of:** Ofori-Boateng et al. (2021) — *Topological Anomaly Detection in Dynamic Multilayer Blockchain Networks* ([arXiv:2106.01806](https://arxiv.org/abs/2106.01806))
 
+Predictive Validation: Beyond anomaly detection, we validated that the extracted topological descriptors provide statistically significant predictive value in controlled forecasting experiments. See predictive-validation/ for details.
+
 ## Overview
 
 This project uses persistent homology to analyze the daily evolution of Ethereum's transaction network and detect structural anomalies that may indicate significant events (market crashes, protocol changes, DeFi exploits, etc.).
