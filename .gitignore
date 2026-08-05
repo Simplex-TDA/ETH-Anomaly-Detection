@@ -5,6 +5,9 @@ config.py
 # Process documentation (not for publication)
 process_docs/
 
+# Website development
+site_process/
+
 # Claude Code settings
 .claude/
 

@@ -9,7 +9,18 @@ Re-running resumes from where it left off.
 
 Output columns:
   date, start_block, end_block, from_addr, to_addr, tx_count, tx_value,
-  max_value, total_gas_price, total_input_bytes, min_input_bytes, factory_approx
+  max_value, total_gas_price, total_gas_fees, total_input_bytes,
+  min_input_bytes, factory_approx
+
+total_gas_fees is the actual ETH burned on gas (gas_used * effective price
+paid per unit gas), not to be confused with total_gas_price (sum of the
+raw gas_price bid field, confounded by tx_count and not the same as what
+was actually paid post-EIP-1559). effective price paid = gas_price for
+legacy (type 0/1) transactions; for type-2 (EIP-1559, live since the
+London hard fork, ~2021-08-05) it's
+min(max_fee_per_gas, base_fee_per_gas + max_priority_fee_per_gas), which
+needs base_fee_per_gas from canonical_execution_block (joined per block,
+scoped to the same block-range chunk already being queried).
 """
 
 import os
@@ -69,31 +80,47 @@ def query_chunk(block_start: int, block_end: int, date_str: str,
                 host: str, user: str, password: str) -> pd.DataFrame:
     """
     Aggregate transactions for blocks [block_start, block_end].
-    Uses a subquery on the block table to avoid a distributed JOIN.
+    Uses a subquery on the block table to avoid a distributed JOIN for the
+    day-boundary lookup; the base_fee_per_gas join below is scoped to the
+    same small block-range chunk (~1000 blocks) already being queried, so
+    it stays a small, local join rather than a distributed one.
     """
     sql = f"""
     SELECT
         '{date_str}'            AS date,
-        min(block_number)       AS start_block,
-        max(block_number)       AS end_block,
-        from_address            AS from_addr,
-        to_address              AS to_addr,
+        min(t.block_number)     AS start_block,
+        max(t.block_number)     AS end_block,
+        t.from_address          AS from_addr,
+        t.to_address            AS to_addr,
         count()                 AS tx_count,
-        SUM(value)              AS tx_value,
-        MAX(value)              AS max_value,
-        SUM(gas_price)          AS total_gas_price,
-        SUM(n_input_nonzero_bytes) AS total_input_bytes,
-        MIN(n_input_nonzero_bytes) AS min_input_bytes,
-        SUM(multiIf(value = 0 AND n_input_nonzero_bytes > 200, 1, 0)) AS factory_approx
+        SUM(t.value)             AS tx_value,
+        MAX(t.value)             AS max_value,
+        SUM(t.gas_price)         AS total_gas_price,
+        SUM(t.gas_used * if(
+            t.transaction_type = 2,
+            least(t.max_fee_per_gas, coalesce(b.base_fee_per_gas, 0) + t.max_priority_fee_per_gas),
+            t.gas_price
+        ))                       AS total_gas_fees,
+        SUM(t.n_input_nonzero_bytes) AS total_input_bytes,
+        MIN(t.n_input_nonzero_bytes) AS min_input_bytes,
+        SUM(multiIf(t.value = 0 AND t.n_input_nonzero_bytes > 200, 1, 0)) AS factory_approx
 
-    FROM default.canonical_execution_transaction
+    FROM default.canonical_execution_transaction AS t
+    GLOBAL LEFT JOIN (
+        SELECT block_number, base_fee_per_gas
+        FROM default.canonical_execution_block
+        WHERE meta_network_name = 'mainnet'
+          AND block_number >= {block_start}
+          AND block_number <= {block_end}
+    ) AS b
+    ON t.block_number = b.block_number
     WHERE
-        meta_network_name = 'mainnet'
-        AND block_number >= {block_start}
-        AND block_number <= {block_end}
+        t.meta_network_name = 'mainnet'
+        AND t.block_number >= {block_start}
+        AND t.block_number <= {block_end}
     GROUP BY
-        from_address,
-        to_address
+        t.from_address,
+        t.to_address
     ORDER BY
         tx_count DESC
     """
@@ -107,6 +134,7 @@ def query_chunk(block_start: int, block_end: int, date_str: str,
     # Convert wei to ETH
     df['tx_value'] = df['tx_value'].astype(float) / 1e18
     df['max_value'] = df['max_value'].astype(float) / 1e18
+    df['total_gas_fees'] = df['total_gas_fees'].astype(float) / 1e18
 
     return df
 
@@ -320,13 +348,14 @@ def aggregate_to_weekly(chunks_dir: str, weekly_dir: str):
                 tx_value=("tx_value", "sum"),
                 max_value=("max_value", "max"),
                 total_gas_price=("total_gas_price", "sum"),
+                total_gas_fees=("total_gas_fees", "sum"),
                 total_input_bytes=("total_input_bytes", "sum"),
                 min_input_bytes=("min_input_bytes", "min"),
                 factory_approx=("factory_approx", "sum")
             )
             [["date", "start_block", "end_block", "from_addr", "to_addr", "tx_count",
-              "tx_value", "max_value", "total_gas_price", "total_input_bytes",
-              "min_input_bytes", "factory_approx"]]
+              "tx_value", "max_value", "total_gas_price", "total_gas_fees",
+              "total_input_bytes", "min_input_bytes", "factory_approx"]]
             .sort_values(["date", "tx_count"], ascending=[True, False])
         )
 

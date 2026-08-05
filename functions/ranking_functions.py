@@ -80,15 +80,36 @@ def read_source_file(
     return make_canonical(chunk)
 
 
+_GROUPBY_KEYS = ('date', 'from_addr', 'to_addr')
+
+
+def metric_cols_from(keep_cols) -> list:
+    """Every column in keep_cols other than the groupby keys -- e.g.
+    tx_count, tx_value, and now total_gas_fees. Generalizes what used to
+    be a hardcoded ['tx_count', 'tx_value'] so any aggregating metric
+    added to keep_cols flows through the ranking pipeline automatically."""
+    return [c for c in keep_cols if c not in _GROUPBY_KEYS]
+
+
 def apply_filter_and_aggregate(chunk: pd.DataFrame, filter_fn, keep_cols) -> pd.DataFrame:
-    """Apply user filter then aggregate to keep_cols — fully vectorised."""
+    """Apply user filter then aggregate to keep_cols — fully vectorised.
+
+    Uses reindex rather than a strict column selection so this tolerates a
+    keep_cols entry that doesn't exist on this particular chunk (e.g.
+    total_gas_fees on an ERC20-only source file, which has no gas info) --
+    it's filled with NaN and skipped by the groupby sum below, rather than
+    raising a KeyError. Only matters when chunk isn't already the union of
+    all sources (run_daily_ranking concats ETH+ERC20 first, so this never
+    triggers there; run_global_ranking filters per-source-file first, where
+    it does).
+    """
     mask  = filter_fn(chunk)
-    chunk = chunk.loc[mask, keep_cols]
+    chunk = chunk.loc[mask].reindex(columns=keep_cols)
     if chunk.empty:
         return chunk
     return (
         chunk.groupby(['date', 'from_addr', 'to_addr'], as_index=False, sort=False)
-             [['tx_count', 'tx_value']].sum()
+             [metric_cols_from(keep_cols)].sum()
     )
 
 
@@ -276,7 +297,7 @@ def run_global_ranking(filters, eth_dir: Path, erc20_dir: Path,
                     continue
                 agg = apply_filter_and_aggregate(raw, filter_fn, keep_cols)
                 if not agg.empty:
-                    acc_parts.append(agg[['from_addr', 'to_addr', 'tx_count', 'tx_value']])
+                    acc_parts.append(agg[['from_addr', 'to_addr'] + metric_cols_from(keep_cols)])
             pbar.close()
 
         if not acc_parts:
@@ -286,7 +307,7 @@ def run_global_ranking(filters, eth_dir: Path, erc20_dir: Path,
         period_edges = (
             pd.concat(acc_parts, ignore_index=True)
               .groupby(['from_addr', 'to_addr'], as_index=False, sort=False)
-              [['tx_count', 'tx_value']].sum()
+              [metric_cols_from(keep_cols)].sum()
         )
         del acc_parts
         tqdm.write(f'[global]   Period edge table: {len(period_edges):,} edges')
@@ -683,7 +704,13 @@ def run_global_centrality_ranking(
                 raw = read_source_file(fpath, token_label, start, end, dead_ads)
                 if raw.empty:
                     continue
-                agg = apply_filter_and_aggregate(raw, filter_fn, ['date', 'from_addr', 'to_addr', 'tx_count', 'tx_value'])
+                # weight_col included explicitly -- this used to hardcode
+                # ['date', 'from_addr', 'to_addr', 'tx_count', 'tx_value'],
+                # which silently broke any weight_col beyond those two
+                # (e.g. total_gas_fees) with a KeyError two lines down.
+                centrality_keep_cols = list(dict.fromkeys(
+                    ['date', 'from_addr', 'to_addr', 'tx_count', 'tx_value', weight_col]))
+                agg = apply_filter_and_aggregate(raw, filter_fn, centrality_keep_cols)
                 if not agg.empty:
                     acc_parts.append(agg[['from_addr', 'to_addr', weight_col]])
             pbar.close()
@@ -810,8 +837,11 @@ def run_daily_centrality_ranking(
         for filter_name, filter_fn in filter_bar:
             filter_bar.set_postfix_str(filter_name, refresh=False)
 
-            week_edges = apply_filter_and_aggregate(week_raw, filter_fn,
-                                                    ['date', 'from_addr', 'to_addr', 'tx_count', 'tx_value'])
+            # weight_col included explicitly -- see the identical fix (and its
+            # rationale) in run_global_centrality_ranking above.
+            centrality_keep_cols = list(dict.fromkeys(
+                ['date', 'from_addr', 'to_addr', 'tx_count', 'tx_value', weight_col]))
+            week_edges = apply_filter_and_aggregate(week_raw, filter_fn, centrality_keep_cols)
             if week_edges.empty:
                 tqdm.write(f'  [{wlabel}/{filter_name}] No data after filter.')
                 continue
@@ -882,6 +912,207 @@ def run_daily_centrality_ranking(
 
     week_bar.close()
     tqdm.write(f'\n✓ Daily centrality ranking complete -> {daily_dir.resolve()}')
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# PART 2C — DAILY CENTRALITY RANKING, EFFICIENT PATH
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# run_daily_centrality_ranking/centrality_rank_nodes above build the graph
+# from the FULL day's filtered edges (hundreds of thousands of edges for a
+# busy filter/day -- measured 523k nodes / 745k edges for one real day),
+# THEN prune to subgraph_top_n. The prune doesn't avoid the cost: building
+# the full graph and sorting all its nodes by degree to find the top
+# subgraph_top_n takes ~7-8s regardless of how small subgraph_top_n is, and
+# that cost is paid again for every centrality metric (the loop structure
+# calls centrality_rank_nodes, which calls build_graph, once per (filter,
+# day, metric) triple) and every weight column. At real scale (6 years x
+# 365 days x ~14 filters x N metrics x M weight columns) this is the
+# difference between minutes and multiple *weeks* -- almost certainly what
+# a prior attempt at this ran into.
+#
+# The fix: build the graph from the SAME top-N-edge selection Mode A
+# (edge-based) ranking already uses (measured: 0.06s, not 7-8s, since it
+# starts from an already-small edge set instead of pruning down from
+# everything) -- ONCE per (filter, day, weight_col) -- then compute every
+# requested centrality metric on that one graph (measured: ~0.3s for 4
+# metrics together, since only the algorithm cost is paid per metric, not
+# another full graph build).
+#
+# NODE-MODE METRICS ONLY here (page_rank, strength, k_core, clustering,
+# degree, hits_hub, hits_authority) -- edge-mode / betweenness_approx are
+# out of scope for this path (betweenness is genuinely expensive even on a
+# small graph, not a build_graph artifact -- see the timing note in
+# STATUS.md / the conversation this was built from).
+
+NODE_MODE_CENTRALITY_FNS = {k: v for k, v in CENTRALITY_FNS.items() if k != 'betweenness_approx'}
+
+
+def build_top_edge_graph(edges: pd.DataFrame, weight_col: str, top_n: int) -> nx.Graph:
+    """Top-N edges by weight_col -> undirected weighted graph. Same edge
+    selection as Mode A ranking (rank_nodes' nlargest), so the resulting
+    graph is small enough that build_graph's subgraph_top_n pruning isn't
+    needed at all."""
+    if edges.empty:
+        return nx.Graph()
+    top_edges = edges.nlargest(top_n, weight_col, keep='first')
+    return build_graph(top_edges, weight_col, subgraph_top_n=None)
+
+
+def compute_node_centralities(G: nx.Graph, weight_col: str, metrics: list[str]) -> dict[str, pd.Series]:
+    """Every requested node-mode centrality metric on the SAME already-built
+    graph -- the key efficiency win over centrality_rank_nodes, which
+    rebuilds the graph fresh per metric. Returns {metric: Series(address -> score)}.
+    A metric that raises (e.g. eigenvector on a disconnected graph -- the
+    normal case here, not an edge case) is skipped for that graph with a
+    warning rather than aborting the other metrics.
+    """
+    out = {}
+    for m in metrics:
+        if m not in NODE_MODE_CENTRALITY_FNS:
+            raise ValueError(f"'{m}' is not a supported node-mode metric here. Available: {list(NODE_MODE_CENTRALITY_FNS)}")
+        try:
+            scores = NODE_MODE_CENTRALITY_FNS[m](G, weight_col)
+            out[m] = pd.Series(scores, name='score')
+        except Exception as exc:
+            tqdm.write(f'    [{m}] FAILED on this graph ({G.number_of_nodes()} nodes, '
+                       f'{nx.number_connected_components(G)} components): {exc}')
+    return out
+
+
+def run_daily_centrality_ranking_efficient(
+    filters, eth_dir: Path, erc20_dir: Path, daily_dir: Path,
+    index_file: Path, centrality_metrics: list[str], weight_cols: list[str],
+    keep_cols: list[str], start, end, top_n: int, dead_ads: list,
+):
+    """Efficient daily centrality ranking -- see the module note above for
+    why this exists instead of run_daily_centrality_ranking. Resumable
+    (reuses the same skip-index/output-file convention), saves after every
+    (filter, weight_col) pair per week. ranking_metric is encoded as
+    "{centrality_metric}__{weight_col}" (e.g. "page_rank__tx_count") to
+    keep the existing 6-column daily_centrality_*.parquet schema (no new
+    column needed) while distinguishing which weight each score used.
+    """
+    source_index = get_source_index(eth_dir, erc20_dir, index_file, start, end)
+    all_weeks = sorted(source_index.keys())
+    tqdm.write(f'[daily-centrality-efficient] {len(all_weeks)} output weeks to process, '
+               f'{len(centrality_metrics)} metrics x {len(weight_cols)} weight columns.')
+
+    week_bar = tqdm(all_weeks, desc='[Daily-Centrality-Efficient] Weeks', unit='week')
+
+    for wlabel in week_bar:
+        week_bar.set_postfix_str(wlabel, refresh=False)
+
+        year_s, rest = wlabel.split('-', 1)
+        month_s, w_s = rest.split('_W')
+        year_i, month_i, w_i = int(year_s), int(month_s), int(w_s)
+        week_start = pd.Timestamp(year_i, month_i, (w_i - 1) * 7 + 1)
+        week_end = pd.Timestamp(
+            year_i, month_i,
+            min(w_i * 7, pd.Timestamp(year_i, month_i, 1).days_in_month)
+        )
+        week_start = max(week_start, start)
+        week_end = min(week_end, end)
+
+        raw_chunks = []
+        src_bar = tqdm(source_index[wlabel], desc='  Reading sources', unit='file', leave=False)
+        for fpath, token_label in src_bar:
+            src_bar.set_postfix_str(fpath.name, refresh=False)
+            raw = read_source_file(fpath, token_label, week_start, week_end, dead_ads)
+            if not raw.empty:
+                raw_chunks.append(raw)
+        src_bar.close()
+
+        if not raw_chunks:
+            tqdm.write(f'  [{wlabel}] No data — skipping.')
+            continue
+
+        week_raw = pd.concat(raw_chunks, ignore_index=True)
+        del raw_chunks
+
+        any_new = False
+
+        filter_bar = tqdm(list(filters.items()), desc=f'  [{wlabel}] Filters', unit='filter', leave=False)
+        for filter_name, filter_fn in filter_bar:
+            filter_bar.set_postfix_str(filter_name, refresh=False)
+
+            week_edges = apply_filter_and_aggregate(week_raw, filter_fn, keep_cols)
+            if week_edges.empty:
+                tqdm.write(f'  [{wlabel}/{filter_name}] No data after filter.')
+                continue
+
+            week_dates = sorted(week_edges['date'].unique())
+            skip = load_centrality_skip_index(daily_dir, wlabel)
+
+            wc_bar = tqdm(weight_cols, desc=f'    [{filter_name}] Weight cols', unit='col', leave=False)
+            for weight_col in wc_bar:
+                wc_bar.set_postfix_str(weight_col, refresh=False)
+
+                ranking_metric_names = [f'{m}__{weight_col}' for m in centrality_metrics]
+                pending_metrics = [
+                    m for m, rmn in zip(centrality_metrics, ranking_metric_names)
+                    if any((filter_name, rmn, pd.Timestamp(d)) not in skip for d in week_dates)
+                ]
+                if not pending_metrics:
+                    continue
+
+                day_bar = tqdm(week_dates, desc=f'      [{weight_col}] Days', unit='day', leave=False)
+                for d in day_bar:
+                    dt = pd.Timestamp(d)
+                    day_bar.set_postfix_str(str(dt.date()), refresh=False)
+
+                    day_edges = week_edges[week_edges['date'] == d]
+                    G = build_top_edge_graph(day_edges, weight_col, top_n)
+                    if G.number_of_nodes() == 0:
+                        for rmn in ranking_metric_names:
+                            skip.add((filter_name, rmn, dt))
+                        continue
+
+                    scores_by_metric = compute_node_centralities(G, weight_col, pending_metrics)
+
+                    day_rows = []
+                    for m, scores in scores_by_metric.items():
+                        rmn = f'{m}__{weight_col}'
+                        top = scores.sort_values(ascending=False).head(top_n)
+                        row = pd.DataFrame({
+                            'address': top.index,
+                            'filter': filter_name,
+                            'ranking_metric': rmn,
+                            'top_rank': range(1, len(top) + 1),
+                            'date': dt,
+                        })
+                        row['bottom_rank'] = row['top_rank']
+                        day_rows.append(row)
+                        skip.add((filter_name, rmn, dt))
+                    # metrics that failed on this graph: still mark as done so they aren't retried forever
+                    for m in pending_metrics:
+                        if m not in scores_by_metric:
+                            skip.add((filter_name, f'{m}__{weight_col}', dt))
+
+                    if day_rows:
+                        day_row = pd.concat(day_rows, ignore_index=True)
+                        out_path = daily_centrality_ranking_path(daily_dir, wlabel)
+                        if out_path.exists():
+                            existing = pd.read_parquet(out_path)
+                            day_row = pd.concat([existing, day_row], ignore_index=True)
+                            del existing
+                        day_row.to_parquet(out_path, index=False)
+                        del day_row
+                        any_new = True
+
+                day_bar.close()
+            wc_bar.close()
+            del week_edges
+
+        filter_bar.close()
+        del week_raw
+
+        if any_new:
+            n = len(pd.read_parquet(daily_centrality_ranking_path(daily_dir, wlabel), columns=['date']))
+            tqdm.write(f'  ✓ {wlabel} saved ({n:,} rows)')
+
+    week_bar.close()
+    tqdm.write(f'\n✓ Efficient daily centrality ranking complete -> {daily_dir.resolve()}')
 
 
 print('ranking_functions.py loaded ✓')
