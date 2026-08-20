@@ -10,7 +10,7 @@ Topological features extracted from Ethereum's daily on-chain transaction graph 
 
 This is a genuinely different question from what this repository's own notebooks ask. `1_dataFetcher.ipynb` → `3_tda.ipynb` build the topology to spot turbulence **after** it's already visible in the graph (anomaly detection, retrospective). This excerpt asks whether the same topology, hooked up to a predictive model instead, also carries information about **future** volatility, ahead of time.
 
-**This is a predictive-power finding, not a trading-profitability claim.** Whether it translates into a profitable trading strategy is a separate, harder question investigated independently in the fuller project this excerpt is drawn from — out of scope for what's here.
+**This is a predictive-power finding, not a trading-profitability claim.** Whether it translates into a profitable trading strategy is a separate, harder question which is out of scope for what's here.
 
 **→ [Read the full report](REPORT.md)** for the complete methodology, every finding, the honest limitations, and exactly how this connects to this repository's own topology pipeline.
 
@@ -25,9 +25,9 @@ Each loads already-computed results (small parquet/CSV files, bundled in `data/`
 | 3 | [`03_tda_dynamics_confirmed_findings.ipynb`](notebooks/03_tda_dynamics_confirmed_findings.ipynb) | The reframing that worked — temporal dynamics of TDA descriptors instead of static snapshots. Four independent, placebo-confirmed feature families. |
 | 4 | [`04_beyond_financial_engineering_and_garch.ipynb`](notebooks/04_beyond_financial_engineering_and_garch.ipynb) | Does TDA survive much harder baselines — engineered financial dynamics, and GARCH (the industry-standard volatility model)? |
 
-## Why this might be worth your time
+## This work's value
 
-Most "TDA + finance" work stops at a proof-of-concept correlation. This project instead ran ~10 full confirmatory rounds — purged walk-forward validation, paired bootstrap + FDR-corrected significance testing, placebo controls that quantify what fraction of an improvement is genuine signal vs. just extra model capacity, two-seed robustness checks, and independent re-derivation of every headline number from saved data rather than trusting a notebook's printed output. Two real methodology bugs were caught and fixed during the project, and are documented (in the fuller project's own log) rather than hidden. Null results got exactly the same rigor as positive ones.
+This is preliminary and exploratory research. The aim was not just to find a configuration that produced a positive result, but to repeatedly test whether an apparent signal survived attempts to make it disappear — through time-aware validation, placebo and significance tests, robustness checks, and independent re-calculation of key results from saved data. The methodology was refined as the project progressed, including the discovery and correction of two methodological bugs, which are documented in the project's research log. Positive and negative results were treated the same way: a promising result was not accepted without further checks, and a null result was not discarded simply because it was less interesting.
 
 ## Quick results summary
 
