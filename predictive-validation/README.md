@@ -1,14 +1,14 @@
 # Predictive Validation: Does This Repo's Topology Also Predict Volatility?
 
-**Short answer: yes, with real statistical evidence — for volatility *prediction*, not (yet) for trading *profitability*.**
+**Short answer: yes — there is evidence that these features contain predictive information for future volatility, though this is preliminary, qualitative research rather than a definitive result.
 
 <p align="center"><img src="figures/report3_auc_ladder.png" width="600" alt="Bar chart ranking predictive approaches by AUC"></p>
 
 ## The headline finding
 
-Topological features extracted from Ethereum's daily on-chain transaction graph — the same persistence-diagram construction this repository already uses for anomaly detection ([Ofori-Boateng et al., 2021](https://arxiv.org/abs/2106.01806)) — give a machine learning model **statistically significant, placebo-confirmed predictive power** for forecasting whether the next 7 days will be more volatile than usual. This holds up on top of plain financial indicators, on top of a much stronger baseline of aggressively engineered financial dynamics, and even on top of a combined baseline that already includes **GARCH**, the textbook volatility-forecasting model used throughout quantitative finance.
+Topological features extracted from Ethereum's daily on-chain transaction graph — the same persistence-diagram construction this repository already uses for anomaly detection ([Ofori-Boateng et al., 2021](https://arxiv.org/abs/2106.01806)) — give a machine learning model **statistically significant, placebo-confirmed predictive power** for forecasting whether the next 7 days will be more volatile than usual. This holds up on top of plain financial indicators, on top of a more extensive baseline built from engineered financial-dynamics features, and even on top of a combined baseline that already includes **GARCH**, a standard benchmark family for volatility forecasting model used throughout quantitative finance.
 
-This is a genuinely different question from what this repository's own notebooks ask. `1_dataFetcher.ipynb` → `3_tda.ipynb` build the topology to spot turbulence **after** it's already visible in the graph (anomaly detection, retrospective). This excerpt asks whether the same topology, hooked up to a predictive model instead, also carries information about **future** volatility, ahead of time.
+This is a genuinely different question from what this repository's own notebooks ask. `1_dataFetcher.ipynb` → `3_tda.ipynb` build the topology to spot turbulence **after** it's already visible in the graph (anomaly detection, retrospective). This excerpt asks whether the same topology, hooked up to a predictive model instead, also carries information about **future** volatility.
 
 **This is a predictive-power finding, not a trading-profitability claim.** Whether it translates into a profitable trading strategy is a separate, harder question which is out of scope for what's here.
 
@@ -22,10 +22,10 @@ Each loads already-computed results (small parquet/CSV files, bundled in `data/`
 |---|---|---|
 | 1 | [`01_phase1_regime_association.ipynb`](notebooks/01_phase1_regime_association.ipynb) | Are independently-discovered financial and topological regimes related? Includes the mutual-information analysis and a real hyperparameter-selection bias this project caught and corrected for — the honest holdout result is null. |
 | 2 | [`02_predictive_framework_and_baseline.ipynb`](notebooks/02_predictive_framework_and_baseline.ipynb) | The walk-forward prediction framework, the `vol_regime_h7` target, and why the original 140 static TDA descriptors don't help (six remediation attempts, all null). |
-| 3 | [`03_tda_dynamics_confirmed_findings.ipynb`](notebooks/03_tda_dynamics_confirmed_findings.ipynb) | The reframing that worked — temporal dynamics of TDA descriptors instead of static snapshots. Four independent, placebo-confirmed feature families. |
-| 4 | [`04_beyond_financial_engineering_and_garch.ipynb`](notebooks/04_beyond_financial_engineering_and_garch.ipynb) | Does TDA survive much harder baselines — engineered financial dynamics, and GARCH (the industry-standard volatility model)? |
+| 3 | [`03_tda_dynamics_confirmed_findings.ipynb`](notebooks/03_tda_dynamics_confirmed_findings.ipynb) | The shift from static TDA descriptors to temporal dynamics, and the feature families that produced the strongest results. — temporal dynamics of TDA descriptors instead of static snapshots. Four independent, placebo-confirmed feature families. |
+| 4 | [`04_beyond_financial_engineering_and_garch.ipynb`](notebooks/04_beyond_financial_engineering_and_garch.ipynb) | Does the observed improvement by TDA remain after adding more extensive financial features — engineered financial dynamics, and GARCH (the industry-standard volatility model)? |
 
-## This work's value
+## Research approach
 
 This is preliminary and exploratory research. The aim was not just to find a configuration that produced a positive result, but to repeatedly test whether an apparent signal survived attempts to make it disappear — through time-aware validation, placebo and significance tests, robustness checks, and independent re-calculation of key results from saved data. The methodology was refined as the project progressed, including the discovery and correction of two methodological bugs, which are documented in the project's research log. Positive and negative results were treated the same way: a promising result was not accepted without further checks, and a null result was not discarded simply because it was less interesting.
 
@@ -37,7 +37,7 @@ This is preliminary and exploratory research. The aim was not just to find a con
 | Does TDA beat plain financial features? | **Yes** | 4 independent feature families confirmed, +0.05 to +0.09 AUC, 80-95% placebo-genuine |
 | Does TDA survive a much stronger baseline (engineered financial dynamics)? | **Yes** | 3 of 4 families still significant, combined ceiling +0.035 AUC (p < 0.001) |
 | Does TDA survive the hardest baseline (GARCH + financial dynamics)? | **Yes** | +0.045 AUC beyond GARCH+dynamics (p < 0.001), highest AUC in the project (0.653) |
-| Does the full stack beat plain GARCH outright? | **Not yet, conventionally** | +0.024 AUC, p ≈ 0.06–0.08 — a near-miss, pushed twice, unmoved |
+| Does the full stack beat plain GARCH outright? | **Not yet, conventionally** | +0.024 AUC, p ≈ 0.06–0.08. The result was close to conventional significance thresholds but did not cross them in either follow-up analysis.|
 
 ## Running these yourself
 
