@@ -8,7 +8,7 @@ The purpose of this article is to report on a project that studies anomalies in 
 
 More specifically, we take daily transaction data (including smart contract's execution) and divide it into four layers: zero-ETH transactions of small, medium and large calldata (reflecting smart contract execution), and non-zero ETH transactions. To each layer, we associate a sequence of increasingly bigger topological spaces (or: subsets of a high dimensional Euclidean space). In that sequence, connected components, loops enclosing an empty region etc. appear and disappear (or: born and die) and that data is organised into a 'persistence diagram'. By measuring differences in daily persistence diagrams, we are able to flag anomalous days, many of which correspond to real-world anomalous events, of either internal or external relation to the chain. Below is a graph of all four layers combined, for the period of 2020-2025, with anomalous days marked.
 
-<p align="center"><img src="figures/chart_all_layers.png" width="640" alt="All-layers S-ESD score overlay, 2020--2025"></p>
+<p align="center"><img src="figures/chart_all_layers.png" width="1000" alt="All-layers S-ESD score overlay, 2020--2025"></p>
 
 *All-layers S-ESD score overlay, 2020--2025.*
 
@@ -32,7 +32,7 @@ Let $D$ be the diameter of the point cloud (the largest distance between any two
 
 The figure below works through a small example by hand: five points, four of them arranged in a square, plus one point off to the side.
 
-<p align="center"><img src="figures/figure1_balls.png" width="640" alt="Growing a disk around each of five points, with the simplicial complex overlaid"></p>
+<p align="center"><img src="figures/figure1_balls.png" width="1000" alt="Growing a disk around each of five points, with the simplicial complex overlaid"></p>
 
 *Growing a disk of radius $\varepsilon/2$ around each of five points, with the simplicial complex overlaid in black/green.*
 
@@ -52,7 +52,7 @@ It's worth asking why "counting holes" is the natural thing to extract from a sh
 
 That list is easiest to work with as a picture: plot every feature as a point, birth on the horizontal axis, death on the vertical. Since a feature can only die after it's born, every point lands above the diagonal; the further above it a point sits, the longer that feature persisted, and the more likely it is to be real structure rather than noise. This scatter plot is the **persistence diagram**.
 
-<p align="center"><img src="figures/figure2_pd.png" width="640" alt="Persistence diagram of the worked example"></p>
+<p align="center"><img src="figures/figure2_pd.png" width="1000" alt="Persistence diagram of the worked example"></p>
 
 *Persistence diagram of the worked example.*
 
@@ -62,7 +62,7 @@ The diagram above records the small example from the previous figure: the three 
 
 To ask whether one day's transaction graph looked structurally different from the day before, we need a distance between two persistence diagrams, not just between points. The tool is the **Wasserstein distance**. Two diagrams are only ever compared if they hold the same kind of feature -- a given day's $H_0$ diagram against the previous day's $H_0$, $H_1$ against $H_1$ -- since a component and a loop have no sensible cost between them. Within one such comparison, the Wasserstein distance computes a **matching**: pair every point in one diagram with exactly one point in the other (or, lacking a good partner, with its own nearest point on the diagonal), so every point ends up paired with something, choosing whichever pairing minimises the total distance walked across all pairs. The minimisation is done separately per homological degree -- one optimal matching for the $H_0$ diagrams, another for the $H_1$ diagrams -- and a layer's overall daily distance is the sum of these: one number combining how much the components moved and how much the loops moved.
 
-<p align="center"><img src="figures/figure3_matching.png" width="640" alt="A matching between two small persistence diagrams"></p>
+<p align="center"><img src="figures/figure3_matching.png" width="1000" alt="A matching between two small persistence diagrams"></p>
 
 *A matching between two small persistence diagrams.*
 
@@ -170,25 +170,25 @@ The four layers are not arbitrary partitions --- they track genuinely different 
 highInput is the **crash layer**: Black Thursday, the May 2021 crash, FTX, Bybit. Complex liquidation mechanics and factory-deployed contracts dominate these days.
 
 
-<p align="center"><img src="figures/chart_highInput.png" width="640" alt="highInput layer S-ESD anomaly scores, 2020-2025"></p>
+<p align="center"><img src="figures/chart_highInput.png" width="1000" alt="highInput layer S-ESD anomaly scores, 2020-2025"></p>
 
 *[Chart: highInput S-ESD scores, 2020--2025. Coral line with coral dots marking 19 flagged anomaly days.]*
 
 medInput is the **DeFi operations layer**: lending crises (Celsius, 3AC), exploits, upgrade transitions (Shanghai, Dencun). This is where protocol-level stress shows up first, and where precursors tend to appear --- the Celsius and Curve signals both arrived in medInput days before the public event.
 
-<p align="center"><img src="figures/chart_medInput.png" width="640" alt="medInput layer S-ESD anomaly scores, 2020-2025"></p>
+<p align="center"><img src="figures/chart_medInput.png" width="1000" alt="medInput layer S-ESD anomaly scores, 2020-2025"></p>
 
 *[Chart: medInput S-ESD scores, 2020--2025. Green line with green dots marking 42 flagged anomaly days.]*
 
 nonFactory is the **governance and institutional layer**, and its behaviour changes the most across the six years. Nearly silent in 2020--21, it becomes the dominant anomaly source in 2024 as ETF flows, election results, and tariff policy all register here. Its evolution from dormant to dominant is itself a record of Ethereum's transition from a DeFi-native to an institutionally integrated network.
 
-<p align="center"><img src="figures/chart_nonFactory.png" width="640" alt="nonFactory layer S-ESD anomaly scores, 2020-2025"></p>
+<p align="center"><img src="figures/chart_nonFactory.png" width="1000" alt="nonFactory layer S-ESD anomaly scores, 2020-2025"></p>
 
 *[Chart: nonFactory S-ESD scores, 2020--2025. Purple line with purple dots marking 51 flagged anomaly days.]*
 
 simple_txs is the **retail and macro layer**: All-Time High moments, halvings, and --- increasingly in 2025 --- ETF-driven flows and Fed policy reactions.
 
-<p align="center"><img src="figures/chart_simple_txs.png" width="640" alt="simple_txs layer S-ESD anomaly scores, 2020-2025"></p>
+<p align="center"><img src="figures/chart_simple_txs.png" width="1000" alt="simple_txs layer S-ESD anomaly scores, 2020-2025"></p>
 
 *[Chart: simple_txs S-ESD scores, 2020--2025. Amber line with amber dots marking 37 flagged anomaly days.]*
 
