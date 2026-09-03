@@ -140,6 +140,14 @@ TDA_CFG = {
 │   ├── period_analysis_functions.py    # Multi-year period analysis
 │   └── period_visualisation_functions.py  # Visualisation
 │
+├── scripts/
+│   ├── runs/                   # Long-running driver scripts (rebuilds, sweeps, fetches)
+│   └── monitoring/             # `check_*_progress.py` — one per driver in runs/, tails its log + results
+│
+├── results/                    # run_results_V1/V2_*.json, curvature_*.parquet, analysis_*.json
+├── logs/                       # stdout logs for scripts/runs/ drivers
+├── archive/                    # superseded pre-fix scripts/results, kept for provenance
+│
 ├── 1_dataFetcher.ipynb             # Download ETH & ERC20 data
 ├── 2_ranking.ipynb                 # Generate node rankings
 ├── 3_tda.ipynb                     # Run TDA pipeline
@@ -148,13 +156,18 @@ TDA_CFG = {
 └── 5_period_visualisation.ipynb    # Visualisation of periods
 ```
 
+Driver scripts in `scripts/runs/` are meant to be invoked from this folder's root
+(e.g. `python3 scripts/runs/run_tda_all_layers_FINAL.py`) — each one `chdir`s back
+to this root on startup regardless of invocation directory, so `data/`, `functions/`,
+and `results/` all resolve correctly either way.
+
 ## Output Files
 
 - `data/{YEAR}/eth_tx_value_output/weekly/` - ETH transaction data
 - `data/{YEAR}/erc20_tx_value_output/weekly/` - ERC20 transfer data
 - `data/ranking/{YEAR}/` - Node rankings
-- `run_results_V1_{YEAR}.json` - TDA results per year
-- `analysis_*.json` - Multi-year analysis results
+- `results/run_results_V1_{YEAR}.json` - TDA results per year
+- `results/analysis_*.json` - Multi-year analysis results
 
 ## Key Concepts
 

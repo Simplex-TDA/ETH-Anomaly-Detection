@@ -4,13 +4,19 @@ Resumable by construction (download_eth_transactions/download_erc20_transfers
 track completed chunks in a per-year _progress.json) -- safe to re-run if
 interrupted, picks up where it left off. Run from the repo root:
 
-    python3 scripts_fetch_all_years.py
+    python3 scripts/runs/scripts_fetch_all_years.py
 
 Logs progress to stdout; redirect to a file if running unattended.
 """
+import os
 import sys
 import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]  # ETH Anomaly Detection/ (this script lives in scripts/runs/)
+os.chdir(ROOT)
 sys.path.insert(0, "functions")
+sys.path.insert(0, str(ROOT))  # for `import credentials`, which lives at ETH Anomaly Detection/credentials.py
 
 from eth_data_fetcher import download_eth_transactions, aggregate_to_weekly
 from erc20_data_fetcher import download_erc20_transfers, aggregate_to_weekly as aggregate_erc20_weekly

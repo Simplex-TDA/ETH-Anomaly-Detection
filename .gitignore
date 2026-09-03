@@ -42,6 +42,11 @@ anomaly_reports/
 *.log
 _progress.json
 
+# Backup/superseded files with suffixes appended after the extension
+# (these bypass the *.json / *.parquet / *.log patterns above)
+*.pre_gudhi_backfill_backup_*
+*.BUGGY_*
+
 # OS files
 .DS_Store
 Thumbs.db

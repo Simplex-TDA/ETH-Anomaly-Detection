@@ -1,12 +1,15 @@
 """Driver: rebuild persistence diagrams for the 6 ETH_only layers +
 contract_txs_ERC20_only, across 3 filtration weights (tx_count, tx_value,
-total_gas_fees where each is meaningful), training-window years only
-(2020-2023).
+total_gas_fees where each is meaningful), now extended to the holdout
+years (2024-2025).
 
 Per this project's standing non-circular discipline (see STATUS.md's
-Methodology Protocol): 2024-2025 stays untouched until a confirmatory
-pipeline has run on this training-window result -- do not extend YEARS to
-include the holdout without a deliberate, separate decision to do so.
+Methodology Protocol): 2024-2025 was deliberately held untouched until the
+confirmatory pipeline had run on the training-window (2020-2023) result --
+it has (13/14 sub-arms FDR-significant on vol_regime_h7, stable across an
+early/late 2022-vs-2023 check), so this is the deliberate decision to
+extend YEARS to include the holdout. Existing 2020-2023 combos are
+untouched (existing_run_names() skips anything already present per year).
 
 TDA_CFG's edge_weight_col/ranking_metric apply globally per run_all()
 call, so this issues 3 separate calls (one per weight), each with only
@@ -41,7 +44,7 @@ sys.path.insert(0, "functions")
 
 from tad_ethereum_functions import run_all
 
-YEARS = [2020, 2021, 2022, 2023]  # training window only -- see module docstring
+YEARS = [2020, 2021, 2022, 2023, 2024, 2025]  # training window + holdout -- see module docstring
 
 BASE_LAYER_FILTERS = {
     "contract_txs_ETH_only": lambda d: (d["tx_value"] == 0) & (d["erc20"] == "ETH"),

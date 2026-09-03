@@ -21,6 +21,26 @@ from pathlib import Path
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# TOKEN DECIMALS
+# ═══════════════════════════════════════════════════════════════════════════
+# canonical_execution_erc20_transfers has no decimals column (confirmed via
+# schema inspection), so per-token scaling has to come from an external,
+# hardcoded source. Covers the majors where getting it wrong matters most by
+# transfer volume; everything else defaults to 18, the ERC20 standard's
+# overwhelming convention. Addresses lowercased to match ClickHouse's storage
+# format regardless of any checksumming on the query side.
+KNOWN_TOKEN_DECIMALS = {
+    "0xdac17f958d2ee523a2206206994597c13d831ec7": 6,   # USDT
+    "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": 6,   # USDC
+    "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599": 8,   # WBTC
+}
+
+
+def token_decimals(erc20_addr: str) -> int:
+    return KNOWN_TOKEN_DECIMALS.get(str(erc20_addr).lower(), 18)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # CLICKHOUSE HTTP HELPER
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -44,12 +64,17 @@ def ch_query(sql: str, host: str, user: str, password: str, timeout: int = 120) 
 # ═══════════════════════════════════════════════════════════════════════════
 
 def get_block_range_for_date(date_str: str, host: str, user: str, password: str) -> tuple[int, int] | None:
-    """Return (min_block, max_block) for a given UTC date on mainnet."""
+    """Return (min_block, max_block) for a given UTC date on mainnet.
+
+    canonical_execution_block is a ReplicatedReplacingMergeTree -- FINAL is
+    required or this can see stale, un-merged duplicate rows depending on
+    background merge timing.
+    """
     sql = f"""
     SELECT
         min(block_number) AS start_block,
         max(block_number) AS end_block
-    FROM default.canonical_execution_block
+    FROM default.canonical_execution_block FINAL
     WHERE
         meta_network_name = 'mainnet'
         AND toDate(block_date_time) = '{date_str}'
@@ -68,6 +93,9 @@ def query_chunk(block_start: int, block_end: int, date_str: str,
                 host: str, user: str, password: str) -> pd.DataFrame:
     """
     Aggregate ERC20 transfers for blocks [block_start, block_end].
+
+    canonical_execution_erc20_transfers is also a ReplicatedReplacingMergeTree
+    -- FINAL required for the same reason as the block/transaction tables.
     """
     sql = f"""
     SELECT
@@ -81,7 +109,7 @@ def query_chunk(block_start: int, block_end: int, date_str: str,
         SUM(value)              AS tx_value,
         MAX(value)              AS max_value
 
-    FROM default.canonical_execution_erc20_transfers
+    FROM default.canonical_execution_erc20_transfers FINAL
     WHERE
         meta_network_name = 'mainnet'
         AND block_number >= {block_start}
@@ -100,9 +128,11 @@ def query_chunk(block_start: int, block_end: int, date_str: str,
     df["end_block"]   = df["end_block"].astype("int64")
     df["tx_count"]    = df["tx_count"].astype("int64")
 
-    # Convert to token units (assuming 18 decimals - adjust if needed)
-    df['tx_value'] = df['tx_value'].astype(float) / 1e18
-    df['max_value'] = df['max_value'].astype(float) / 1e18
+    # Convert to token units, per-token decimals (not a blanket 1e18 --
+    # USDT/USDC use 6, WBTC uses 8; see KNOWN_TOKEN_DECIMALS above)
+    divisor = df["erc20"].map(lambda a: 10.0 ** token_decimals(a))
+    df['tx_value'] = df['tx_value'].astype(float) / divisor
+    df['max_value'] = df['max_value'].astype(float) / divisor
 
     return df
 

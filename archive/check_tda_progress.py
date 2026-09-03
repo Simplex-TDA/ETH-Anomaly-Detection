@@ -18,8 +18,8 @@ import re
 import time
 from pathlib import Path
 
-YEARS = [2020, 2021, 2022, 2023]
-LOG_FILE = Path("run_tda_all_years.log")
+YEARS = [2020, 2021, 2022, 2023, 2024, 2025]
+LOG_FILE = Path("run_tda_all_years_2024_2025.log")
 RESULTS_PREFIX_BASE = "run_results_V2"
 
 EXPECTED = {

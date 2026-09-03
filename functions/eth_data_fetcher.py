@@ -56,12 +56,19 @@ def ch_query(sql: str, host: str, user: str, password: str, timeout: int = 120) 
 # ═══════════════════════════════════════════════════════════════════════════
 
 def get_block_range_for_date(date_str: str, host: str, user: str, password: str) -> tuple[int, int] | None:
-    """Return (min_block, max_block) for a given UTC date on mainnet."""
+    """Return (min_block, max_block) for a given UTC date on mainnet.
+
+    canonical_execution_block is a ReplicatedReplacingMergeTree -- FINAL is
+    required or this can see stale, un-merged duplicate rows depending on
+    background merge timing (confirmed empirically: the same query without
+    FINAL returned a materially different row count than with it, for
+    identical historical, already-finalized blocks).
+    """
     sql = f"""
     SELECT
         min(block_number) AS start_block,
         max(block_number) AS end_block
-    FROM default.canonical_execution_block
+    FROM default.canonical_execution_block FINAL
     WHERE
         meta_network_name = 'mainnet'
         AND toDate(block_date_time) = '{date_str}'
@@ -84,6 +91,11 @@ def query_chunk(block_start: int, block_end: int, date_str: str,
     day-boundary lookup; the base_fee_per_gas join below is scoped to the
     same small block-range chunk (~1000 blocks) already being queried, so
     it stays a small, local join rather than a distributed one.
+
+    Both tables are ReplicatedReplacingMergeTree -- FINAL required on both
+    (verified: without FINAL, the same block range returns duplicate-
+    inflated rows depending on background merge state; ClickHouse syntax
+    requires FINAL to come after the alias -- `AS t FINAL`, not `FINAL AS t`).
     """
     sql = f"""
     SELECT
@@ -105,10 +117,10 @@ def query_chunk(block_start: int, block_end: int, date_str: str,
         MIN(t.n_input_nonzero_bytes) AS min_input_bytes,
         SUM(multiIf(t.value = 0 AND t.n_input_nonzero_bytes > 200, 1, 0)) AS factory_approx
 
-    FROM default.canonical_execution_transaction AS t
+    FROM default.canonical_execution_transaction AS t FINAL
     GLOBAL LEFT JOIN (
         SELECT block_number, base_fee_per_gas
-        FROM default.canonical_execution_block
+        FROM default.canonical_execution_block FINAL
         WHERE meta_network_name = 'mainnet'
           AND block_number >= {block_start}
           AND block_number <= {block_end}
