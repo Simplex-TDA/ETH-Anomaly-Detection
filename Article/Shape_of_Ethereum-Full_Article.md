@@ -214,4 +214,4 @@ The clearest summary: in 2024, nonFactory fires 11 of 16 events and simple_txs f
 4. Harpaz, Y., Nuiten, J. and Prasma, M., "The abstract cotangent complex and Quillen cohomology of enriched categories," Journal of Topology, 11(3), 2018, pp. 752--798 (see p. 15)
 5. Simplex-TDA, "ETH-Anomaly-Detection" (code repository), <https://github.com/Simplex-TDA/ETH-Anomaly-Detection>
 6. Simplex-TDA, "predictive-validation" (volatility-prediction experiment), <https://github.com/Simplex-TDA/ETH-Anomaly-Detection/tree/main/predictive-validation>
-7. Simplex-TDA, "Appendix" (event-matching and attribution methodology, attribution tiers, and the complete list of all 86 anomaly events) -- link to be added
+7. Simplex-TDA, "Appendix" (event-matching and attribution methodology, attribution tiers, and the complete list of all 86 anomaly events), <https://github.com/Simplex-TDA/ETH-Anomaly-Detection/blob/main/Article/Shape_of_Ethereum-Appendix.md>
